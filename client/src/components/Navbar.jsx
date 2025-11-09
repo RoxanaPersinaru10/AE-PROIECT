@@ -1,39 +1,37 @@
-import { useDispatch, useSelector } from "react-redux";
+import React from "react";
 import { Link } from "react-router-dom";
-import { setLoggedIn } from "../store/slices/globalSlice";
 
 function Navbar() {
-  const { loggedIn } = useSelector((state) => state.global);
-  const { cart } = useSelector((state) => state.cart);
-  const dispatch = useDispatch();
-
-  const logoutUser = () => {
-    dispatch(setLoggedIn(false));
-    localStorage.removeItem("token");
-  };
-
-  const getCartLength = () => {
-    return cart?.reduce((acc, item) => acc + item.quantity, 0);
-  }
+  const token = localStorage.getItem("token");
 
   return (
-    <div className="navbarWrapper">
-      <Link to="/">Homepage</Link>
-
-      {loggedIn ? (
-        <>
-          <Link to="/" onClick={() => logoutUser()}>
-            Logout
+    <nav className="bg-blue-700 text-white p-4 flex justify-between items-center">
+      <div className="text-xl font-bold">
+        <Link to="/">🌍 Home</Link>
+      </div>
+      <div className="flex gap-4">
+        {token ? (
+          <>
+            <Link to="/users" className="hover:underline">
+              👥 Utilizatori
+            </Link>
+            <button
+              onClick={() => {
+                localStorage.removeItem("token");
+                window.location.href = "/auth";
+              }}
+              className="bg-red-500 px-3 py-1 rounded hover:bg-red-600"
+            >
+              Logout
+            </button>
+          </>
+        ) : (
+          <Link to="/auth" className="hover:underline">
+            🔐 Autentificare
           </Link>
-          <Link to="/cart">
-            <i className="fas fa-shopping-cart"></i>
-            <span style={{ paddingLeft: "4px" }}>Cart {getCartLength()}</span>
-          </Link>
-        </>
-      ) : (
-        <Link to="/login">Login</Link>
-      )}
-    </div>
+        )}
+      </div>
+    </nav>
   );
 }
 

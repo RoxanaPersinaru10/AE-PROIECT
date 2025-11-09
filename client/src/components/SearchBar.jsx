@@ -9,7 +9,7 @@ function SearchBar() {
   const [passengers, setPassengers] = useState(1);
   const [flights, setFlights] = useState([]);
 
-  // 📍 Lista de aeroporturi / orașe pentru autocomplete
+  // 📍 Lista de aeroporturi pentru autocomplete
   const airports = [
     { code: "OTP", name: "Bucharest Henri Coandă International" },
     { code: "BLQ", name: "Bologna Guglielmo Marconi" },
@@ -46,21 +46,52 @@ function SearchBar() {
   const [toSuggestions, setToSuggestions] = useState([]);
 
   // 🟢 Căutare zboruri
+  const [loading, setLoading] = useState(false);
+
   const handleSearch = async (e) => {
     e.preventDefault();
+
+    if (loading) return; // 🧱 oprește apelurile multiple
+
     if (!from || !to || !depart || !ret) {
       alert("Completează toate câmpurile!");
       return;
     }
 
+    setFlights([]);
+    setLoading(true); // 🔵 marcam că începe căutarea
+
     const url = `http://localhost:3000/flights/fetch?from=${from}&to=${to}&depart=${depart}&ret=${ret}&adults=${passengers}`;
 
-    const res = await fetch(url);
-    const data = await res.json();
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
 
-    if (data.success) setFlights(data.data);
-    else alert("Nu s-au găsit zboruri 😕");
+      if (data.success && Array.isArray(data.data)) {
+        const uniqueFlights = data.data.filter(
+          (v, i, self) =>
+            i ===
+            self.findIndex(
+              (z) => z.from === v.from && z.to === v.to && z.price === v.price
+            )
+        );
+
+        const sortedFlights = uniqueFlights.sort((a, b) => a.price - b.price);
+        const limitedFlights = sortedFlights.slice(0, 20);
+
+        setFlights(limitedFlights);
+      } else {
+        alert("Nu s-au găsit zboruri 😕");
+        setFlights([]);
+      }
+    } catch (error) {
+      console.error("Eroare la căutarea zborurilor:", error);
+      alert("Eroare la conexiunea cu serverul.");
+    } finally {
+      setLoading(false); // 🔵 căutarea s-a terminat
+    }
   };
+
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-blue-100 flex flex-col items-center py-12 px-4">
@@ -68,7 +99,7 @@ function SearchBar() {
         Caută bilete de avion ✈️
       </h1>
 
-      {/* 🔹 Form de căutare */}
+      {/* 🔹 Formular de căutare */}
       <form
         onSubmit={handleSearch}
         className="bg-white shadow-lg rounded-2xl p-6 flex flex-wrap justify-center gap-6 max-w-6xl w-full"
@@ -160,38 +191,44 @@ function SearchBar() {
 
       {/* 🔹 Rezultate */}
       <div className="mt-10 grid gap-4 w-full max-w-5xl">
-        {flights.map((f, idx) => (
-          <div
-            key={idx}
-            className="bg-white rounded-xl shadow-md p-5 flex justify-between items-center border-l-4 border-blue-400"
-          >
-            <div>
-              <p className="text-lg font-semibold text-gray-800">
-                {f.from} → {f.to}
-              </p>
-
-              <p className="text-gray-600">
-                <b>Plecare:</b> {new Date(f.departDate).toLocaleString()}
-              </p>
-
-              {f.returnDate && (
-                <p className="text-gray-600">
-                  <b>Întoarcere:</b> {new Date(f.returnDate).toLocaleString()}
+        {flights.length > 0 ? (
+          flights.map((f, idx) => (
+            <div
+              key={idx}
+              className="bg-white rounded-xl shadow-md p-5 flex justify-between items-center border-l-4 border-blue-400"
+            >
+              <div>
+                <p className="text-lg font-semibold text-gray-800">
+                  {f.from} → {f.to}
                 </p>
-              )}
 
-              <p className="text-blue-700 mt-1">
-                {f.airline} {f.airlineReturn && `/ ${f.airlineReturn}`}
-              </p>
-            </div>
+                <p className="text-gray-600">
+                  <b>Plecare:</b> {new Date(f.departDate).toLocaleString()}
+                </p>
 
-            <div className="text-right">
-              <p className="text-2xl font-bold text-green-600">
-                {f.price.toFixed(2)}$
-              </p>
+                {f.returnDate && (
+                  <p className="text-gray-600">
+                    <b>Întoarcere:</b> {new Date(f.returnDate).toLocaleString()}
+                  </p>
+                )}
+
+                <p className="text-blue-700 mt-1">
+                  {f.airline} {f.airlineReturn && `/ ${f.airlineReturn}`}
+                </p>
+              </div>
+
+              <div className="text-right">
+                <p className="text-2xl font-bold text-green-600">
+                  {f.price.toFixed(2)}$
+                </p>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        ) : (
+          <p className="text-gray-500 text-center text-lg">
+            Nu există zboruri de afișat.
+          </p>
+        )}
       </div>
     </div>
   );

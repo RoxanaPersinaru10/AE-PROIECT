@@ -1,66 +1,40 @@
+// server/src/utils/token.js
 const jwt = require("jsonwebtoken");
-const JWT_SECRET = process.env.JWT_SECRET;
 
-/**
- * Function to generate a JWT
- * @param {string} id - The user ID to include in the token
- * @returns {string} - The generated JWT
- * @throws {Error} - If JWT_SECRET is not defined
- */
-const generateToken = id => {
-  if (!JWT_SECRET) {
-    throw new Error("JWT_SECRET is not defined");
-  }
-
-  return jwt.sign({ id }, JWT_SECRET, {
-    expiresIn: "1h",
-  });
-};
-
-/**
- * Middleware to verify a JWT
- * @param {Request} req - The request object
- * @param {Response} res - The response object
- * @param {NextFunction} next - The next middleware function
- */
+// ✅ Middleware pentru protejarea rutelor
 const verifyToken = (req, res, next) => {
-  const bearerHeader = req.headers["authorization"];
-  const token = bearerHeader?.split(" ")[1];
-  if (!token) {
+  const bearerToken = req.headers["authorization"];
+
+  if (!bearerToken)
     return res.status(401).json({
       success: false,
-      message: "Unauthorized - No valid token",
-      data: {},
+      message: "Token lipsă din header Authorization",
     });
-  }
 
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
-    if (err) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized - Invalid token",
-        data: {},
-      });
-    }
+  const token = bearerToken.split(" ")[1];
+  if (!token)
+    return res.status(400).json({ success: false, message: "Token invalid" });
+
+  jwt.verify(token, process.env.TOKEN_SECRET, (err, decoded) => {
+    if (err)
+      return res
+        .status(400)
+        .json({ success: false, message: "Token invalid", data: {} });
 
     req.userId = decoded.id;
-
+    req.userRole = decoded.role;
     next();
   });
 };
 
-/**
- * Function to verify a JWT and return true or false
- * @param {string} token - The JWT to verify
- * @returns {boolean} - True if the token is valid, false otherwise
- */
-const isValidToken = token => {
+// ✅ Funcție simplă de verificare token (folosită la /auth/check)
+const isValidToken = (token) => {
   try {
-    jwt.verify(token, JWT_SECRET);
+    jwt.verify(token, process.env.TOKEN_SECRET);
     return true;
-  } catch {
+  } catch (error) {
     return false;
   }
 };
 
-module.exports = { verifyToken, generateToken, isValidToken };
+module.exports = { verifyToken, isValidToken };

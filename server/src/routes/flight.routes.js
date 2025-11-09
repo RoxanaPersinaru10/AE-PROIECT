@@ -9,11 +9,12 @@ const router = express.Router();
 /**
  * 🟢 GET /flights/fetch
  * Primește parametri dinamici (from, to, depart, return) din frontend
- * Apelează API-ul real și salvează zborurile (dus + întors) în baza de date,
- * toate într-un singur obiect.
+ * Apelează API-ul real și salvează maximum 20 de zboruri (unice) în baza de date.
  */
 router.get("/fetch", async (req, res) => {
   try {
+    console.log("🚀 Cerere nouă la /flights/fetch:", new Date().toISOString());
+
     const { from, to, depart, ret, adults } = req.query;
 
     if (!from || !to || !depart || !ret) {
@@ -39,7 +40,7 @@ router.get("/fetch", async (req, res) => {
       },
     };
 
-    // 📡 Cerere reală către API
+    // 📡 Cerere către API extern
     const response = await axios.request(options);
 
     const itineraries = response.data?.data?.itineraries || [];
@@ -60,7 +61,8 @@ router.get("/fetch", async (req, res) => {
         to: legGo?.destination?.name || "Necunoscut",
         departDate: legGo?.departure,
         returnDate: legReturn?.departure || null,
-        airline: legGo?.carriers?.marketing?.[0]?.name || "Companie necunoscută",
+        airline:
+          legGo?.carriers?.marketing?.[0]?.name || "Companie necunoscută",
         airlineReturn:
           legReturn?.carriers?.marketing?.[0]?.name || "Companie necunoscută",
         price: it.price?.raw || 0,
@@ -79,10 +81,14 @@ router.get("/fetch", async (req, res) => {
       }
     }
 
+    // 🔹 Sortăm după preț și limităm la primele 20 zboruri
+    const limitedFlights = uniqueFlights
+      .sort((a, b) => a.price - b.price)
+      .slice(0, 20);
+
     // 💾 Salvăm în baza de date doar dacă nu există deja
     let addedCount = 0;
-
-    for (const f of uniqueFlights) {
+    for (const f of limitedFlights) {
       const exists = await Flight.findOne({
         where: {
           from: f.from,
@@ -90,6 +96,7 @@ router.get("/fetch", async (req, res) => {
           date: f.departDate,
           return_date: f.returnDate,
           airline: f.airline,
+          airline_return: f.airlineReturn,
           price: f.price,
         },
       });
@@ -110,8 +117,8 @@ router.get("/fetch", async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Am găsit ${uniqueFlights.length} zboruri (dus + întors), dintre care ${addedCount} noi au fost adăugate.`,
-      data: uniqueFlights,
+      message: `Am găsit ${limitedFlights.length} zboruri (max 20 unice), dintre care ${addedCount} noi au fost adăugate.`,
+      data: limitedFlights,
     });
   } catch (error) {
     console.error("❌ Eroare API:", error.response?.data || error.message);
@@ -173,7 +180,9 @@ router.get("/html", async (req, res) => {
           <td>${f.from}</td>
           <td>${f.to}</td>
           <td>${new Date(f.date).toLocaleString()}</td>
-          <td>${new Date(f.return_date).toLocaleString()}</td>
+          <td>${
+            f.return_date ? new Date(f.return_date).toLocaleString() : "-"
+          }</td>
           <td>${f.airline}</td>
           <td>${f.airline_return}</td>
           <td>${f.price}$</td>
@@ -205,6 +214,80 @@ router.get("/html", async (req, res) => {
     `);
   } catch (error) {
     res.status(500).send("<h3>Eroare la afișarea datelor.</h3>");
+  }
+});
+
+/* 🔹🔹🔹 CRUD MANUAL PENTRU ZBORURI 🔹🔹🔹 */
+
+// 🔸 POST - Creează un zbor manual
+// 🔸 POST - Creează un zbor manual (cu log detaliat)
+// 🔸 POST - Creează un zbor manual (cu conversii corecte)
+router.post("/", async (req, res) => {
+  try {
+    const { id, from, to, date, return_date, airline, airline_return, price } = req.body;
+
+    if (!from || !to || !date || !airline || !price) {
+      return res.status(400).json({
+        success: false,
+        message: "Câmpuri obligatorii lipsă: from, to, date, airline, price",
+      });
+    }
+
+    const flight = await Flight.create({
+      from,
+      to,
+      date: new Date(date), // ✅ convertim string → Date
+      return_date: return_date ? new Date(return_date) : null,
+      airline,
+      airline_return: airline_return || null,
+      price: parseFloat(price), // ✅ convertim string → float
+    });
+
+    res.json({ success: true, message: "Zbor creat ✅", data: flight });
+  } catch (err) {
+    console.error("❌ Eroare la crearea zborului:", err);
+    res.status(500).json({
+      success: false,
+      message: "Eroare la creare zbor",
+      error: err.message,
+    });
+  }
+});
+
+
+
+// 🔸 PUT - Actualizează un zbor
+router.put("/:id", async (req, res) => {
+  try {
+    const flight = await Flight.findByPk(req.params.id);
+    if (!flight)
+      return res
+        .status(404)
+        .json({ success: false, message: "Zborul nu există" });
+
+    await flight.update(req.body);
+    res.json({ success: true, message: "Zbor actualizat ✅", data: flight });
+  } catch (err) {
+    res
+      .status(500)
+      .json({ success: false, message: "Eroare la actualizare", error: err.message });
+  }
+});
+
+// 🔸 DELETE - Șterge un zbor
+router.delete("/:id", async (req, res) => {
+  try {
+    const deleted = await Flight.destroy({ where: { id: req.params.id } });
+    if (!deleted)
+      return res
+        .status(404)
+        .json({ success: false, message: "Zborul nu există" });
+
+    res.json({ success: true, message: "Zbor șters ✅" });
+  } catch (err) {
+    res
+      .status(500)
+      .json({ success: false, message: "Eroare la ștergere", error: err.message });
   }
 });
 

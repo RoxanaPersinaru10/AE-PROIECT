@@ -4,6 +4,8 @@ const { User } = require('./database/models'); // ✅ păstrează DOAR asta
 const flightRoutes = require("./routes/flight.routes");
 const dotenv = require('dotenv');
 const morgan = require('morgan');
+const authRoutes = require("./routes/auth.routes");
+const userRoutes = require("./routes/user.routes");
 
 const app = express();
 dotenv.config();
@@ -19,6 +21,9 @@ app.use(morgan('dev'));
 app.use(cors());
 app.use(express.json());
 app.use("/flights", flightRoutes);
+app.use("/auth", authRoutes);
+app.use("/users", userRoutes);
+
 
 app.get("/", async (req, res) => {
   try {
